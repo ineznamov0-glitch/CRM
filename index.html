@@ -290,6 +290,69 @@
             background: #00ee55;
         }
 
+        /* ===== НОВЫЕ КНОПКИ ПРИОРИТЕТА ===== */
+        .btn-priority-up {
+            background: #4a90d9;
+            color: white;
+            font-weight: 700;
+            padding: 6px 10px;
+            font-size: 14px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-width: 32px;
+        }
+        .btn-priority-up:hover {
+            background: #5ba0e9;
+            transform: scale(1.05);
+        }
+        .btn-priority-down {
+            background: #d94a4a;
+            color: white;
+            font-weight: 700;
+            padding: 6px 10px;
+            font-size: 14px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-width: 32px;
+        }
+        .btn-priority-down:hover {
+            background: #e95a5a;
+            transform: scale(1.05);
+        }
+        .btn-priority-up:disabled,
+        .btn-priority-down:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+        .priority-badge {
+            display: inline-block;
+            background: #555;
+            color: white;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            line-height: 28px;
+            text-align: center;
+            font-size: 12px;
+            font-weight: 900;
+            margin-right: 6px;
+        }
+        .priority-badge.top {
+            background: #ff4444;
+            box-shadow: 0 0 15px rgba(255, 68, 68, 0.4);
+        }
+        .priority-badge.mid {
+            background: #ff8800;
+        }
+        .priority-badge.low {
+            background: #4a90d9;
+        }
+
         /* ===== ТАБЛИЦЫ ===== */
         .table-wrap {
             background: #2a2a2a;
@@ -300,7 +363,7 @@
         table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 700px;
+            min-width: 750px;
         }
         thead {
             background: #333;
@@ -715,7 +778,7 @@
         </div>
 
         <!-- ============================================ -->
-        <!-- ПАНЕЛЬ ЗАДАЧИ -->
+        <!-- ПАНЕЛЬ ЗАДАЧИ (с приоритетами) -->
         <!-- ============================================ -->
         <div class="panel" id="panel-tasks">
             <div class="stats">
@@ -740,8 +803,9 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>#</th>
+                            <th style="width:50px;">#</th>
                             <th>Название задачи</th>
+                            <th>Приоритет</th>
                             <th>Срок</th>
                             <th>Время</th>
                             <th>Статус</th>
@@ -749,7 +813,7 @@
                         </tr>
                     </thead>
                     <tbody id="taskTableBody">
-                        <tr><td colspan="6"><div class="empty"><span>📋</span>Нет задач. Добавьте первую!</div></td></tr>
+                        <tr><td colspan="7"><div class="empty"><span>📋</span>Нет задач. Добавьте первую!</div></td></tr>
                     </tbody>
                 </table>
             </div>
@@ -866,7 +930,7 @@
         }
 
         // ============================================================
-        //   ДАННЫЕ (ПУСТО)
+        //   ДАННЫЕ
         // ============================================================
         let clients = [];
         let tasks = [];
@@ -876,6 +940,14 @@
             const t = localStorage.getItem('crm_tasks');
             clients = c ? JSON.parse(c) : [];
             tasks = t ? JSON.parse(t) : [];
+            // Добавляем поле priority если его нет
+            tasks.forEach((task, index) => {
+                if (task.priority === undefined) {
+                    task.priority = index;
+                }
+            });
+            // Сортируем по приоритету
+            tasks.sort((a, b) => (a.priority || 0) - (b.priority || 0));
             saveAllData();
         }
 
@@ -1077,8 +1149,47 @@
         }
 
         // ============================================================
-        //   ЗАДАЧИ
+        //   ЗАДАЧИ С ПРИОРИТЕТАМИ
         // ============================================================
+        function moveTaskUp(id) {
+            const index = tasks.findIndex(t => t.id === id);
+            if (index <= 0) return;
+            // Меняем приоритеты местами
+            const tempPriority = tasks[index].priority;
+            tasks[index].priority = tasks[index - 1].priority;
+            tasks[index - 1].priority = tempPriority;
+            // Меняем местами в массиве
+            [tasks[index], tasks[index - 1]] = [tasks[index - 1], tasks[index]];
+            saveAllData();
+            renderTasks();
+            playCatSound();
+            showToast('⬆️ Приоритет повышен!', 'success');
+        }
+
+        function moveTaskDown(id) {
+            const index = tasks.findIndex(t => t.id === id);
+            if (index >= tasks.length - 1) return;
+            // Меняем приоритеты местами
+            const tempPriority = tasks[index].priority;
+            tasks[index].priority = tasks[index + 1].priority;
+            tasks[index + 1].priority = tempPriority;
+            // Меняем местами в массиве
+            [tasks[index], tasks[index + 1]] = [tasks[index + 1], tasks[index]];
+            saveAllData();
+            renderTasks();
+            playCatSound();
+            showToast('⬇️ Приоритет понижен!', 'success');
+        }
+
+        function getPriorityBadge(priority, total) {
+            const rank = (priority || 0) + 1;
+            let cls = 'priority-badge';
+            if (rank <= Math.ceil(total * 0.3)) cls += ' top';
+            else if (rank <= Math.ceil(total * 0.6)) cls += ' mid';
+            else cls += ' low';
+            return `<span class="${cls}">${rank}</span>`;
+        }
+
         function renderTasks() {
             const search = document.getElementById('taskSearchInput').value.toLowerCase().trim();
             const filter = document.getElementById('taskFilterStatus').value;
@@ -1087,6 +1198,7 @@
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
+            // Обновляем статусы
             tasks.forEach(t => {
                 if (t.status === 'Выполнена') return;
                 const taskDate = new Date(t.date + 'T00:00:00');
@@ -1097,21 +1209,18 @@
                 }
             });
 
+            // Сортируем по приоритету
+            tasks.sort((a, b) => (a.priority || 0) - (b.priority || 0));
+
             let filtered = tasks.filter(t => {
                 const matchSearch = t.name.toLowerCase().includes(search);
                 const matchStatus = filter === 'all' || t.status === filter;
                 return matchSearch && matchStatus;
             });
 
-            filtered.sort((a, b) => {
-                const da = new Date(a.date + 'T00:00:00');
-                const db = new Date(b.date + 'T00:00:00');
-                return da - db;
-            });
-
             if (filtered.length === 0) {
                 tbody.innerHTML =
-                    `<tr><td colspan="6"><div class="empty"><span>📋</span>Нет задач</div></td></tr>`;
+                    `<tr><td colspan="7"><div class="empty"><span>📋</span>Нет задач</div></td></tr>`;
                 return;
             }
 
@@ -1133,10 +1242,21 @@
                     statusLabel = '✅ Активна';
                 }
 
+                const totalTasks = filtered.length;
+                const isFirst = i === 0;
+                const isLast = i === totalTasks - 1;
+
                 return `
                     <tr class="${rowClass}">
                         <td>${i + 1}</td>
                         <td><strong>${t.name}</strong></td>
+                        <td>
+                            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                                ${getPriorityBadge(t.priority, totalTasks)}
+                                <button class="btn-priority-up" onclick="moveTaskUp(${t.id})" ${isFirst ? 'disabled' : ''} title="Повысить приоритет">⬆️</button>
+                                <button class="btn-priority-down" onclick="moveTaskDown(${t.id})" ${isLast ? 'disabled' : ''} title="Понизить приоритет">⬇️</button>
+                            </div>
+                        </td>
                         <td>${t.date}</td>
                         <td>${t.time || '-'}</td>
                         <td><span class="status status-${t.status === 'Выполнена' ? 'done' : t.status === 'Просрочена' ? 'cancel' : 'work'}">${statusLabel}</span></td>
@@ -1151,6 +1271,7 @@
                 `;
             }).join('');
 
+            // Обновляем статистику
             const total = tasks.length;
             const active = tasks.filter(t => t.status === 'Активна' || t.status === 'Просрочена').length;
             const urgent = tasks.filter(t => {
@@ -1204,13 +1325,15 @@
                 }
                 showToast('✅ Задача обновлена!', 'success');
             } else {
-                tasks.push({
+                const newTask = {
                     id: Date.now(),
                     name,
                     date,
                     time: time || '',
-                    status: status || 'Активна'
-                });
+                    status: status || 'Активна',
+                    priority: tasks.length // новый приоритет — в конец
+                };
+                tasks.push(newTask);
                 showToast('✅ Задача добавлена!', 'success');
             }
 
@@ -1233,6 +1356,8 @@
         function deleteTask(id) {
             if (!confirm('Удалить эту задачу?')) return;
             tasks = tasks.filter(t => t.id !== id);
+            // Пересчитываем приоритеты
+            tasks.forEach((t, i) => t.priority = i);
             saveAllData();
             renderTasks();
             showToast('🗑️ Задача удалена', 'error');
@@ -1263,6 +1388,11 @@
                     if (data.clients && data.tasks) {
                         clients = data.clients;
                         tasks = data.tasks;
+                        // Убедимся что у всех задач есть priority
+                        tasks.forEach((t, i) => {
+                            if (t.priority === undefined) t.priority = i;
+                        });
+                        tasks.sort((a, b) => (a.priority || 0) - (b.priority || 0));
                         saveAllData();
                         renderClients();
                         renderTasks();
